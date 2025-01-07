@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Grid-EYE Dashboard</title>
+    <!-- Bootstrap 5 (CDN) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css">
+    <!-- OpenLayers CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.3.0/ol.css">
+    <!-- Custom Styles -->
+    <style>
+        /* Corps principal */
+        body {
+            background-color: #121212; /* Fond sombre */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #ffffff; /* Texte par défaut en blanc */
+        }
+    
+        /* Champs de saisie spécifiques */
+        input[type="datetime-local"],
+        input[type="search"] {
+            color: #2c2c2c; /* Texte noir */
+            background-color: #ffffff; /* Fond blanc */
+        }
+    
+        /* Autres champs de saisie */
+        input:not([type="datetime-local"]):not([type="search"]), 
+        textarea, 
+        select {
+            color: #ffffff; /* Texte blanc */
+            background-color: #121212; /* Fond sombre */
+        }
+    
+        /* Barre de navigation */
+        .navbar {
+            background-color: #1f1f1f;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+        }
+    
+        .nav-link {
+            color: #ffffff !important; /* Texte des liens en blanc */
+        }
+    
+        .nav-link.active {
+            color: #ffffff;
+            background-color: #333333 !important;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+    
+        /* Cartes et conteneurs */
+        .card {
+            color: #ffffff;
+            background-color: #1e1e1e;
+            border: none;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+    
+        canvas {
+            color: #ffffff;
+            border: 1px solid #333333;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            image-rendering: pixelated;
+            background-color: #000000;
+        }
+    
+        #mapid {
+            color: #ffffff;
+            width: 100%;
+            height: 500px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            background-color: #000000;
+        }
+    
+        /* Conteneur de matrice */
+        .matrix-container {
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+    
+        .frame-item {
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.3s;
+            background-color: #2c2c2c;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 5px;
+            color: #ffffff;
+        }
+    
+        .frame-item:hover {
+            color: #ffffff;
+            background-color: #3a3a3a;
+            transform: scale(1.02);
+        }
+    
+        .btn-refresh {
+            color: #ffffff;
+            margin-top: 10px;
+        }
+    
+        /* Media queries pour les petits écrans */
+        @media (max-width: 768px) {
+            canvas {
+                width: 100%;
+                height: auto;
+            }
+            #mapid {
+                height: 300px;
+            }
+        }
+    
+        /* Boutons actifs */
+        .btn-group .btn.active {
+            background-color: #0d6efd;
+            color: white;
+        }
+    </style>
+     
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark mb-4">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="#">Grid-EYE Dashboard</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" 
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link active" id="link-direct" href="#" onclick="showTab('direct')">Mode Direct</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="link-history" href="#" onclick="showTab('history')">Historique</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="link-map" href="#" onclick="showTab('map')">Map Globale</a>
+                </li>
+            </ul>
+            <!-- Bouton de Rafraîchissement Global -->
+            <button class="btn btn-outline-light" onclick="globalRefresh()">Rafraîchir Tout</button>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+
+    <!-- Onglet Direct -->
+    <div id="tab-direct" class="mb-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Mode Direct</h5>
+                <p class="card-text">Affichage temps réel de la dernière frame (GET /api/live) toutes les 2s</p>
+                <div class="row">
+                    <div class="col-md-6">
+                        <canvas id="matrix-canvas" width="400" height="400"></canvas>
+                        <div id="gps-info" class="mt-2 fw-bold">GPS: lat=?, lon=?</div>
+                        <button class="btn btn-sm btn-primary btn-refresh" onclick="refreshLive()">Rafraîchir maintenant</button>
+                        <!-- Légende des Couleurs -->
+                        <div class="mt-2">
+                            <canvas id="legend-canvas" width="200" height="20"></canvas>
+                            <div class="d-flex justify-content-between">
+                                <span>Min Temp</span>
+                                <span>Max Temp</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Onglet Historique -->
+    <div id="tab-history" class="mb-4" style="display: none;">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Historique</h5>
+                                
+                <!-- Section des Filtres -->
+                <div class="mb-3">
+                    <h6>Filtres</h6>
+                    <form id="filter-form" class="row g-3">
+                        <div class="col-md-6">
+                            <label for="dateMin" class="form-label">Date Min</label>
+                            <input type="datetime-local" class="form-control" id="dateMin" name="dateMin">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="dateMax" class="form-label">Date Max</label>
+                            <input type="datetime-local" class="form-control" id="dateMax" name="dateMax">
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary">Appliquer les Filtres</button>
+                            <button type="button" class="btn btn-secondary" onclick="resetFilters()">Réinitialiser les Filtres</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Boutons de Sélection Rapide -->
+                <div class="mb-3">
+                    <h6>Sélection Rapide</h6>
+                    <div class="btn-group" role="group" aria-label="Sélection Rapide">
+                        <button type="button" class="btn btn-outline-primary" onclick="applyQuickFilter('1min')" id="quick-1min">1 Minute</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="applyQuickFilter('10min')" id="quick-10min">10 Minutes</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="applyQuickFilter('1h')" id="quick-1h">1 Heure</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="applyQuickFilter('24h')" id="quick-24h">24 Heures</button>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4">
+                        <div id="history-list" class="mt-3 list-group" style="max-height: 500px; overflow-y: auto;">
+                            <!-- Les frames seront chargées dynamiquement via JavaScript -->
+                        </div>
+                        <button class="btn btn-sm btn-secondary btn-refresh mt-2" onclick="loadHistory(currentPage)">Rafraîchir l'Historique</button>
+                        <!-- Pagination -->
+                        <div id="history-pagination" class="d-flex justify-content-between mt-2">
+                            <button class="btn btn-sm btn-secondary" onclick="prevPage()">Précédent</button>
+                            <span id="history-page-info">Page 1</span>
+                            <button class="btn btn-sm btn-secondary" onclick="nextPage()">Suivant</button>
+                        </div>
+                    </div>
+                    <div class="col-md-8 matrix-container">
+                        <canvas id="history-matrix" width="400" height="400"></canvas>
+                        <div id="history-info" class="mt-2 fw-bold">Frame: Sélectionnez une frame</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Onglet Map -->
+    <div id="tab-map" class="mb-4" style="display: none;">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Map Globale</h5>
+                <div class="row">
+                    <div class="col-md-8">
+                        <div id="mapid"></div>
+                        <button class="btn btn-sm btn-secondary btn-refresh mt-2" onclick="loadMap()">Rafraîchir la Carte</button>
+                    </div>
+                    <div class="col-md-4 matrix-container">
+                        <canvas id="map-matrix" width="400" height="400"></canvas>
+                        <div id="map-info" class="mt-2 fw-bold">Frame: Sélectionnez un point sur la carte</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+<!-- OpenLayers JS -->
+<script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
+<script>
+    // Gestion des onglets
+    function showTab(tabName) {
+        const tabs = ['direct', 'history', 'map'];
+        tabs.forEach(name => {
+            document.getElementById(`tab-${name}`).style.display = (name === tabName) ? 'block' : 'none';
+            document.getElementById(`link-${name}`).classList.toggle('active', name === tabName);
+        });
+
+        // Désactiver tous les boutons de sélection rapide lorsque l'on change d'onglet
+        if(tabName !== 'history'){
+            deactivateQuickFilters();
+        }
+    }
+    showTab('direct');
+
+    // Fonction améliorée pour dessiner la matrice de pixels avec une palette de couleurs naturelle
+    function drawMatrix(canvas, pixels) {
+        const ctx = canvas.getContext('2d');
+        const size = 8;
+        const cellSize = canvas.width / size;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Définir une échelle de couleurs naturelle (du bleu au rouge via le vert et le jaune)
+        const colorScale = (val, min, max) => {
+            const ratio = (val - min) / (max - min);
+            let r, g, b;
+
+            if (ratio <= 0.25) {
+                // Bleu à Cyan
+                r = 0;
+                g = Math.round(255 * (ratio / 0.25));
+                b = 255;
+            } else if (ratio <= 0.5) {
+                // Cyan à Vert
+                r = 0;
+                g = 255;
+                b = Math.round(255 * (1 - (ratio - 0.25) / 0.25));
+            } else if (ratio <= 0.75) {
+                // Vert à Jaune
+                r = Math.round(255 * ((ratio - 0.5) / 0.25));
+                g = 255;
+                b = 0;
+            } else {
+                // Jaune à Rouge
+                r = 255;
+                g = Math.round(255 * (1 - (ratio - 0.75) / 0.25));
+                b = 0;
+            }
+
+            return `rgb(${r},${g},${b})`;
+        };
+
+        const minT = Math.min(...pixels);
+        const maxT = Math.max(...pixels);
+
+        for(let row = 0; row < size; row++) {
+            for(let col = 0; col < size; col++) {
+                const val = pixels[row * size + col];
+                const color = colorScale(val, minT, maxT);
+                ctx.fillStyle = color;
+                ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+                ctx.strokeStyle = '#333333';
+                ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
+            }
+        }
+    }
+
+    // Fonction pour dessiner la légende des couleurs
+    function drawLegend(canvas, min, max) {
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, width, height);
+
+        // Définir la même échelle de couleurs que pour la matrice
+        const colorScale = (ratio) => {
+            let r, g, b;
+
+            if (ratio <= 0.25) {
+                // Bleu à Cyan
+                r = 0;
+                g = Math.round(255 * (ratio / 0.25));
+                b = 255;
+            } else if (ratio <= 0.5) {
+                // Cyan à Vert
+                r = 0;
+                g = 255;
+                b = Math.round(255 * (1 - (ratio - 0.25) / 0.25));
+            } else if (ratio <= 0.75) {
+                // Vert à Jaune
+                r = Math.round(255 * ((ratio - 0.5) / 0.25));
+                g = 255;
+                b = 0;
+            } else {
+                // Jaune à Rouge
+                r = 255;
+                g = Math.round(255 * (1 - (ratio - 0.75) / 0.25));
+                b = 0;
+            }
+
+            return `rgb(${r},${g},${b})`;
+        };
+
+        // Dessiner l'échelle de couleurs
+        for(let i = 0; i < width; i++) {
+            const ratio = i / width;
+            ctx.fillStyle = colorScale(ratio);
+            ctx.fillRect(i, 0, 1, height);
+        }
+    }
+
+    // Mode Direct
+    function refreshLive(){
+        fetch("/api/live")
+            .then(res => res.json())
+            .then(data => {
+                if (data.pixels && data.pixels.length === 64) {
+                    console.log("Pixels reçus :", data.pixels); // Pour vérification
+                    drawMatrix(document.getElementById('matrix-canvas'), data.pixels);
+                    document.getElementById('gps-info').innerText = `GPS: lat=${data.lat.toFixed(4)}, lon=${data.lon.toFixed(4)}`;
+
+                    // Dessiner la légende
+                    const legendCanvas = document.getElementById('legend-canvas');
+                    const minT = Math.min(...data.pixels);
+                    const maxT = Math.max(...data.pixels);
+                    drawLegend(legendCanvas, minT, maxT);
+                }
+            })
+            .catch(err => console.error("Erreur /api/live:", err));
+    }
+
+    // Rafraîchir automatiquement toutes les 2 secondes si on est sur l'onglet direct
+    setInterval(()=>{
+        const tabDirectVisible = (document.getElementById("tab-direct").style.display === 'block');
+        if(tabDirectVisible) refreshLive();
+    }, 2000);
+
+    // Historique
+    const historyList = document.getElementById('history-list');
+    const historyCanvas = document.getElementById('history-matrix');
+    let currentPage = 1;
+    const perPage = 100;
+    let currentFilters = {};
+
+    function drawHistoryMatrix(pixels){
+        drawMatrix(historyCanvas, pixels);
+    }
+
+    // Fonction pour charger l'historique avec les filtres et la pagination
+    function loadHistory(page = 1){
+        let url = `/api/history?page=${page}&per_page=${perPage}`;
+
+        // Ajouter les filtres à l'URL
+        if(currentFilters.dateMin){
+            url += `&dateMin=${encodeURIComponent(currentFilters.dateMin)}`;
+        }
+        if(currentFilters.dateMax){
+            url += `&dateMax=${encodeURIComponent(currentFilters.dateMax)}`;
+        }
+        if(currentFilters.pixelMin){
+            url += `&pixelMin=${encodeURIComponent(currentFilters.pixelMin)}`;
+        }
+        if(currentFilters.pixelMax){
+            url += `&pixelMax=${encodeURIComponent(currentFilters.pixelMax)}`;
+        }
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                historyList.innerHTML = "";
+                if(data.frames && data.frames.length === 0){
+                    historyList.innerHTML = "<p>Aucune donnée disponible.</p>";
+                    return;
+                }
+
+                if(data.frames) { // si paginé
+                    data.frames.forEach(frame => {
+                        const div = document.createElement("a");
+                        div.className = "list-group-item list-group-item-action frame-item";
+                        div.textContent = `${frame.index} | ${frame.timestamp} | lat=${frame.lat !== null ? frame.lat.toFixed(4) : 'N/A'}, lon=${frame.lon !== null ? frame.lon.toFixed(4) : 'N/A'}`;
+                        div.onclick = () => loadHistoryFrame(frame.index);
+                        historyList.appendChild(div);
+                    });
+
+                    // Mettre à jour l'information de la page
+                    document.getElementById('history-page-info').innerText = `Page ${data.page}`;
+                }
+
+                currentPage = data.page;
+            })
+            .catch(err => console.error("Erreur /api/history:", err));
+    }
+
+    // Fonction pour gérer le clic sur une frame dans l'historique
+    function loadHistoryFrame(idx){
+        fetch(`/api/frame/${idx}`)
+            .then(res => res.json())
+            .then(data => {
+                if(data.pixels && data.pixels.length === 64){
+                    drawHistoryMatrix(data.pixels);
+                    document.getElementById('history-info').innerText =
+                        `Frame #${data.index} | lat=${data.lat !== null ? data.lat.toFixed(4) : 'N/A'}, lon=${data.lon !== null ? data.lon.toFixed(4) : 'N/A'} | ${data.timestamp}`;
+                }
+            })
+            .catch(err => console.error(`Erreur /api/frame/${idx}:`, err));
+    }
+
+    // Gestion du formulaire de filtres
+    document.getElementById('filter-form').addEventListener('submit', function(event){
+        event.preventDefault(); // Empêcher le rechargement de la page
+
+        // Récupérer les valeurs des filtres
+        const dateMin = document.getElementById('dateMin').value;
+        const dateMax = document.getElementById('dateMax').value;
+        const pixelMin = document.getElementById('pixelMin').value;
+        const pixelMax = document.getElementById('pixelMax').value;
+
+        // Mettre à jour les filtres actuels
+        currentFilters = {
+            dateMin: dateMin || undefined,
+            dateMax: dateMax || undefined,
+            pixelMin: pixelMin || undefined,
+            pixelMax: pixelMax || undefined
+        };
+
+        // Désactiver les boutons de sélection rapide
+        deactivateQuickFilters();
+
+        // Charger l'historique avec les nouveaux filtres
+        currentPage = 1; // Réinitialiser la page courante
+        loadHistory(currentPage);
+    });
+
+    // Fonction pour réinitialiser les filtres
+    function resetFilters(){
+        document.getElementById('filter-form').reset();
+        currentFilters = {};
+        currentPage = 1;
+        loadHistory(currentPage);
+
+        // Désactiver les boutons de sélection rapide
+        deactivateQuickFilters();
+    }
+
+    // Fonction pour appliquer les filtres rapides
+    function applyQuickFilter(range){
+        const now = new Date();
+        let startTime;
+
+        switch(range){
+            case '1min':
+                startTime = new Date(now.getTime() - 1 * 60 * 1000);
+                break;
+            case '10min':
+                startTime = new Date(now.getTime() - 10 * 60 * 1000);
+                break;
+            case '1h':
+                startTime = new Date(now.getTime() - 60 * 60 * 1000);
+                break;
+            case '24h':
+                startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                break;
+            default:
+                startTime = null;
+        }
+
+        if(startTime){
+            // Ajouter une minute supplémentaire à dateMax pour inclure la minute actuelle
+            const adjustedNow = new Date(now.getTime() + 60 * 1000); // Ajouter 1 minute
+
+            // Formatage au format 'YYYY-MM-DDTHH:MM'
+            const pad = (num) => num.toString().padStart(2, '0');
+            const formatDate = (date) => {
+                const year = date.getFullYear();
+                const month = pad(date.getMonth() + 1);
+                const day = pad(date.getDate());
+                const hours = pad(date.getHours());
+                const minutes = pad(date.getMinutes());
+                return `${year}-${month}-${day}T${hours}:${minutes}`;
+            };
+
+            const formattedStart = formatDate(startTime);
+            const formattedEnd = formatDate(adjustedNow);
+
+            // Mettre à jour les champs de saisie
+            document.getElementById('dateMin').value = formattedStart;
+            document.getElementById('dateMax').value = formattedEnd;
+
+            // Mettre à jour les filtres actuels
+            currentFilters = {
+                dateMin: formattedStart,
+                dateMax: formattedEnd,
+                pixelMin: currentFilters.pixelMin || undefined,
+                pixelMax: currentFilters.pixelMax || undefined
+            };
+
+            // Activer le bouton sélectionné et désactiver les autres
+            activateQuickFilterButton(range);
+
+            // Charger l'historique avec les nouveaux filtres
+            currentPage = 1;
+            loadHistory(currentPage);
+        }
+    }
+
+    // Fonctions pour gérer l'état actif des boutons de sélection rapide
+    function activateQuickFilterButton(selectedRange){
+        const ranges = ['1min', '10min', '1h', '24h'];
+        ranges.forEach(range => {
+            const button = document.getElementById(`quick-${range}`);
+            if(range === selectedRange){
+                button.classList.add('active');
+            }
+            else{
+                button.classList.remove('active');
+            }
+        });
+    }
+
+    function deactivateQuickFilters(){
+        const ranges = ['1min', '10min', '1h', '24h'];
+        ranges.forEach(range => {
+            const button = document.getElementById(`quick-${range}`);
+            button.classList.remove('active');
+        });
+    }
+
+    // Fonctions de pagination
+    function prevPage(){
+        if(currentPage > 1){
+            currentPage--;
+            loadHistory(currentPage);
+        }
+    }
+
+    function nextPage(){
+        currentPage++;
+        loadHistory(currentPage);
+    }
+
+    // Charger l'historique au clic sur l'onglet Historique
+    document.getElementById("link-history").addEventListener("click", () => {
+        loadHistory(currentPage);
+    });
+
+    // Initialiser OpenLayers
+    const map = new ol.Map({
+        target: 'mapid',
+        layers: [
+            new ol.layer.Tile({
+                source: new ol.source.OSM()
+            })
+        ],
+        view: new ol.View({
+            center: ol.proj.fromLonLat([2.3522, 48.8566]), // Longitude, Latitude de Paris
+            zoom: 10  // Niveau de zoom ajusté (réduit de 12 à 10)
+        })
+    });
+
+    // Ajouter un vecteur source pour les marqueurs
+    const vectorSource = new ol.source.Vector({});
+
+    // Ajouter une couche vecteur
+    const vectorLayer = new ol.layer.Vector({
+        source: vectorSource
+    });
+    map.addLayer(vectorLayer);
+
+    // Fonction pour ajouter un marqueur
+    function addMarker(lon, lat, frameId, timestamp) {
+        const feature = new ol.Feature({
+            geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat])),
+            frameId: frameId,
+            timestamp: timestamp
+        });
+
+        // Style du marqueur
+        feature.setStyle(new ol.style.Style({
+            image: new ol.style.Circle({
+                radius: 6,  // Ajustez la taille selon vos besoins
+                fill: new ol.style.Fill({color: '#11b4da'}),
+                stroke: new ol.style.Stroke({
+                    color: '#ffffff', width: 2
+                })
+            })
+        }));
+
+        vectorSource.addFeature(feature);
+    }
+
+    // Fonction pour charger les marqueurs sur la carte
+    function loadMap(){
+        // Construire l'URL avec les filtres actuels si nécessaire
+        let url = "/api/history?page=1&per_page=1000"; // Ajustez 'per_page' selon vos besoins
+
+        // Optionnel : Inclure les filtres actuels pour la carte
+        // Si vous souhaitez que la carte reflète les mêmes filtres que l'historique, décommentez les lignes suivantes
+        /*
+        if(currentFilters.dateMin){
+            url += `&dateMin=${encodeURIComponent(currentFilters.dateMin)}`;
+        }
+        if(currentFilters.dateMax){
+            url += `&dateMax=${encodeURIComponent(currentFilters.dateMax)}`;
+        }
+        if(currentFilters.pixelMin){
+            url += `&pixelMin=${encodeURIComponent(currentFilters.pixelMin)}`;
+        }
+        if(currentFilters.pixelMax){
+            url += `&pixelMax=${encodeURIComponent(currentFilters.pixelMax)}`;
+        }
+        */
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                if(data.frames && data.frames.length === 0){
+                    console.log("Aucune donnée pour afficher sur la carte.");
+                    return;
+                }
+
+                // Nettoyer les marqueurs existants
+                vectorSource.clear();
+
+                if(data.frames) { // si paginé
+                    data.frames.forEach(frame => {
+                        if(frame.lat !== null && frame.lon !== null){
+                            addMarker(frame.lon, frame.lat, frame.index, frame.timestamp);
+                        }
+                    });
+                }
+                else { // si non paginé
+                    data.frames.forEach(frame => {
+                        if(frame.lat !== null && frame.lon !== null){
+                            addMarker(frame.lon, frame.lat, frame.index, frame.timestamp);
+                        }
+                    });
+                }
+            })
+            .catch(err => console.error("Erreur /api/history:", err));
+    }
+
+    // Ajouter une interaction pour les clics sur les marqueurs
+    map.on('singleclick', function(evt) {
+        const feature = map.forEachFeatureAtPixel(evt.pixel, function(feature) {
+            return feature;
+        });
+
+        if (feature) {
+            const coordinates = feature.getGeometry().getCoordinates();
+            const frameId = feature.get('frameId');
+            const timestamp = feature.get('timestamp');
+
+            // Charger et afficher la matrice correspondante
+            drawMapMatrix(frameId);
+        }
+    });
+
+    // Fonction pour dessiner et afficher la matrice de la frame sélectionnée sur la carte
+    function drawMapMatrix(frameId){
+        fetch(`/api/frame/${frameId}`)
+            .then(res => res.json())
+            .then(data => {
+                if(data.pixels && data.pixels.length === 64){
+                    drawMatrix(document.getElementById('map-matrix'), data.pixels);
+                    document.getElementById('map-info').innerText =
+                        `Frame #${data.index} | lat=${data.lat !== null ? data.lat.toFixed(4) : 'N/A'}, lon=${data.lon !== null ? data.lon.toFixed(4) : 'N/A'} | ${data.timestamp}`;
+                }
+            })
+            .catch(err => console.error(`Erreur /api/frame/${frameId}:`, err));
+    }
+
+    // Rafraîchir la carte toutes les 2 secondes si on est sur l'onglet map
+    setInterval(()=>{
+        const tabMapVisible = (document.getElementById("tab-map").style.display === 'block');
+        if(tabMapVisible){
+            loadMap();
+        }
+    }, 2000);
+
+    // Charger la carte au clic sur l'onglet Map
+    document.getElementById("link-map").addEventListener("click", () => {
+        loadMap();
+    });
+
+    // Bouton de Rafraîchissement Global
+    function globalRefresh(){
+        refreshLive();
+        loadHistory(currentPage);
+        loadMap();
+    }
+
+    // Initialiser le Mode Direct au chargement
+    document.addEventListener("DOMContentLoaded", () => {
+        refreshLive();
+    });
+</script>
+</body>
+</html>
