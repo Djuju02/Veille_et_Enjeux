@@ -1,5 +1,3 @@
----
-
 **Projet Capteur Infrarouge avec Arduino et Flask**
 
 **Description**  
@@ -87,5 +85,3 @@ Open the web interface at: [http://localhost:5000](http://localhost:5000).
 **Licence**  
 Ce projet est sous licence MIT. Veuillez consulter le fichier `LICENSE` pour plus de détails.  
 This project is licensed under the MIT License. See the `LICENSE` file for details.  
-
---- 
